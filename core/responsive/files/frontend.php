@@ -38,22 +38,31 @@ class Frontend extends Base {
 
 		$file_content = file_get_contents( $this->template_file );
 
-		$file_content = preg_replace_callback( '/ELEMENTOR_SCREEN_([A-Z]+)_([A-Z]+)/', function ( $placeholder_data ) use ( $breakpoints_keys, $breakpoints ) {
+		$file_content = preg_replace_callback( '/ELEMENTOR_SCREEN_([A-Z_]+)(?:_(MIN|MAX|NEXT))/', function ( $placeholder_data ) use ( $breakpoints_keys, $breakpoints ) {
+			// Handle BC for legacy template files and Elementor Pro builds.
+			$placeholder_data = $this->maybe_convert_placeholder_data( $placeholder_data );
+
 			if ( 'DESKTOP' === $placeholder_data[1] ) {
 				$value = Plugin::$instance->breakpoints->get_desktop_min_point();
 			} else {
 				$breakpoint_index = array_search( strtolower( $placeholder_data[1] ), $breakpoints_keys, true );
 
-				$is_max_point = 'MAX' === $placeholder_data[2];
+				// Handle cases where a placeholder is found for an additional breakpoint that isn't active.
+				if ( false === $breakpoint_index ) {
+					$value = -1;
+				} else {
+					$is_max_point = 'MAX' === $placeholder_data[2];
 
-				if ( ! $is_max_point ) {
-					$breakpoint_index--;
-				}
+					// If the placeholder capture is `MOBILE_NEXT` or `TABLET_NEXT`, the original breakpoint value is used.
+					if ( ! $is_max_point && 'NEXT' !== $placeholder_data[2] ) {
+						$breakpoint_index--;
+					}
 
-				$value = $breakpoints[ $breakpoints_keys[ $breakpoint_index ] ]->get_value();
+					$value = $breakpoints[ $breakpoints_keys[ $breakpoint_index ] ]->get_value();
 
-				if ( ! $is_max_point ) {
-					$value++;
+					if ( ! $is_max_point ) {
+						$value++;
+					}
 				}
 			}
 
@@ -145,5 +154,31 @@ class Frontend extends Base {
 		}
 
 		return $option;
+	}
+
+	/**
+	 * Maybe Convert Placeholder Data
+	 *
+	 * Converts responsive placeholders in Elementor CSS template files from the legacy format into the new format.
+	 * Used for backwards compatibility for old Pro versions that were built with an Elementor Core version <3.2.0.
+	 *
+	 * @since 3.2.3
+	 *
+	 * @param $placeholder_data
+	 * @return mixed
+	 */
+	private function maybe_convert_placeholder_data( $placeholder_data ) {
+		switch ( $placeholder_data[1] ) {
+			case 'SM':
+				$placeholder_data[1] = 'MOBILE';
+				break;
+			case 'MD':
+				$placeholder_data[1] = 'TABLET';
+				break;
+			case 'LG':
+				$placeholder_data[1] = 'DESKTOP';
+		}
+
+		return $placeholder_data;
 	}
 }
